@@ -1,0 +1,61 @@
+OVERALL
+=======
+imgsplit is a program to split a region of an image into several smaller
+images as if this region "was cut by a slicing grid".
+
+For example, `imgsplit -s 100,50 -w 128 -h 64 -r 5 -c 6 -p tree_ trees.png`
+will take the image in trees.png and split it into 5*6 (rows * columns)
+different ones, each having 128x64 pixels, starting at pixel 100,50 (including
+it) in the original image. So it's as if you inserted a grid of 5 rows and 6
+columns, each grid cell being 128x64 pixels, at the top/left position 100,50 of
+the input image, and finally having the contents of each cell being placed
+in a different image (output) file.
+
+The image files can be output in two ways:
+
+- PREFIX followed by the image row and then column number: tree_1_3.png
+- PREFIX followed by the image number (from 0 to ROWS*COLUMNS-1): tree_9.png
+
+The first way is the default way (it's what you get without any special
+command line argument). The second way is what you get by specifying the -1
+option (for an one dimensional numbering scheme).
+
+SMALL REFERENCE
+===============
+Usage:
+
+  imgsplit [-s start_pos]
+           -w cell_width
+           -h cell_hight
+           -r rows_count
+           -c columns_count
+           [-p output_images_prefix]
+           [-1]
+           [-2]
+           [--]
+           input_file
+
+If you don't specify a prefix, the name of the file without the extension will
+be used.
+
+If you don't specify a start position, '0,0' will be used.
+
+To specify the start position, you should give an unsigned integer number
+followed by another unsigned integer number having only a comma in between
+them. Specifically, no spaces are allowed in between the numbers, and they
+also should be placed in the same command line argument.
+
+PROGRAM DEPENDENCIES
+====================
+This program depends on the SDL2 and SDL2_image libraries.
+
+The build system (make files) is only required to work with gnu make.
+
+It uses the C (C99) language.
+
+C API
+=====
+It should be easy for someone to take the ImgSplit.h and ImgSplit.c files and
+drop them into his/her own project.
+
+The C API is simple, but it's specified in its own file. Check the C_API file.

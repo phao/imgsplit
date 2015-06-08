@@ -1,0 +1,4 @@
+imgsplit
+*.d
+*.o
+*.png
