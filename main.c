@@ -20,8 +20,10 @@ static int rows = -1,
            dim = 2;
 
 static char *output_prefix;
-
+static char *output_prefix_allocated_storage;
 static char *input_file;
+
+static SDL_Surface *input_surf;
 
 static void
 Fail(char const *fmt, ...) {
@@ -54,6 +56,9 @@ ReadOptions(int argc, char **argv) {
       switch (argv[i][1]) {
         case 's': {
           i++;
+          if (i == argc) {
+            Fail("Starting position unspecified (but -s was found).");
+          }
           char *ended_at = ParseNonNegativeInt(argv[i], &start_pos_x, ',');
           if (ended_at) {
             ended_at++;
@@ -66,50 +71,72 @@ ReadOptions(int argc, char **argv) {
           }
           break;
         }
+
         case 'w':
           i++;
+          if (i == argc) {
+            Fail("Width unspecified (but -w was found).");
+          }
           if (ParseNonNegativeInt(argv[i], &cell_width, 0) == 0) {
             Fail("Invalid width value: %s.", argv[i]);
           }
           break;
+
         case 'h':
           i++;
+          if (i == argc) {
+            Fail("Height unspecified (but -h was found).");
+          }
           if (ParseNonNegativeInt(argv[i], &cell_height, 0) == 0) {
             Fail("Invalid height value: %s.", argv[i]);
           }
           break;
+
         case 'r':
           i++;
+          if (i == argc) {
+            Fail("Rows unspecified (but -r was found).");
+          }
           if (ParseNonNegativeInt(argv[i], &rows, 0) == 0) {
             Fail("Invalid rows value: %s.", argv[i]);
           }
           break;
+
         case 'c':
           i++;
+          if (i == argc) {
+            Fail("Columns unspecified (but -c was found).");
+          }
           if (ParseNonNegativeInt(argv[i], &columns, 0) == 0) {
             Fail("Invalid columns value: %s.", argv[i]);
           }
           break;
+
         case '1':
           dim = 1;
           break;
+
         case '2':
           dim = 2;
           break;
+
         case '-':
           reading_opts = 0;
           break;
+
         case 'p':
+          // Prefix was explicitly specified.
           i++;
           if (i < argc) {
             output_prefix = argv[i];
           }
           else if (i == argc) {
-            Fail("Prefix string unspecified.");
+            Fail("Prefix string unspecified (but -p was found).");
           }
           break;
+
         default:
-          Fail("Unknown command line option %c.", argv[i]);
+          Fail("Unknown command line option %s.", argv[i]);
       }
     }
     else {
@@ -117,37 +144,70 @@ ReadOptions(int argc, char **argv) {
     }
   }
 
-  if (rows <= 0) {
-    Fail("Invalid rows.");
-  }
-  else if (columns <= 0) {
-    Fail("Invalid columns.");
-  }
-  else if (cell_width <= 0) {
-    Fail("Invalid width.");
-  }
-  else if (cell_height <= 0) {
-    Fail("Invalid height.");
-  }
-  else if (input_file == 0) {
+  assert(start_pos_x >= 0);
+  assert(start_pos_y >= 0);
+
+  if (input_file == 0) {
     Fail("Input file unspecified.");
   }
-  else if (start_pos_x < 0) {
+  else {
+    input_surf = IMG_Load(input_file);
+    if (input_surf == 0) {
+      Fail("%s.", IMG_GetError());
+    }
+  }
+
+  if (start_pos_x < 0) {
     Fail("Invalid start position (negative x): %d.", start_pos_x);
   }
   else if (start_pos_y < 0) {
     Fail("Invalid start position (negative y): %d.", start_pos_y);
   }
+  else if (start_pos_x >= input_surf->w) {
+    Fail("Start X position lies outside image width bounds: %d of %d.\n",
+         start_pos_x, input_surf->w);
+  }
+  else if (start_pos_y >= input_surf->h) {
+    Fail("Start Y position lies outside image height bounds: %d of %d.\n",
+         start_pos_y, input_surf->h);
+  }
 
-  if (rows > INT_MAX/columns) {
+  if (columns > 0 && rows > INT_MAX/columns) {
     Fail("There are too many rows (%d) and columns (%d).", rows, columns);
   }
+
+  if (rows < 0 && cell_height > 0) {
+    rows = (input_surf->h - start_pos_y)/cell_height;
+  }
+  if (columns < 0 && cell_width > 0) {
+    columns = (input_surf->w - start_pos_x)/cell_width;
+  }
+  if (cell_height < 0 && rows > 0) {
+    cell_height = (input_surf->h - start_pos_y)/rows;
+  }
+  if (cell_width < 0 && columns > 0) {
+    cell_width = (input_surf->w - start_pos_x)/columns;
+  }
+
+  if (rows <= 0) {
+    Fail("Invalid rows value: %d.", rows);
+  }
+  else if (columns <= 0) {
+    Fail("Invalid columns value: %d.", columns);
+  }
+  else if (cell_width <= 0) {
+    Fail("Invalid width value: %d.", cell_width);
+  }
+  else if (cell_height <= 0) {
+    Fail("Invalid height value: %d.", cell_height);
+  }
+
 
   // The output prefix should be set to the piece of the input file that comes
   // before the extension. If the input file doesn't have an extension, we
   // just make it be the whole input file.
   if (output_prefix == 0) {
-    size_t len = strlen(input_file);
+    size_t const len = strlen(input_file);
     size_t ext_point = len;
     while (ext_point > 0) {
       ext_point--;
@@ -156,15 +216,21 @@ ReadOptions(int argc, char **argv) {
       }
     }
     if (ext_point == 0) {
+      // Input file has no extension. Output prefix is the input file
+      // string.
       output_prefix = input_file;
     }
     else {
+      // Input file has an extension. Whatever comes before the extension is
+      // the output prefix.
+      //
       // ext_point is the index of the '.', which is also how many characters
       // there are before the '.'.
       output_prefix = malloc(ext_point+1);
       if (!output_prefix) {
         Fail("Memory error: %s.", strerror(errno));
       }
+      output_prefix_allocated_storage = output_prefix;
       strncpy(output_prefix, input_file, ext_point);
       output_prefix[ext_point] = 0;
     }
@@ -174,8 +240,6 @@ ReadOptions(int argc, char **argv) {
   assert(columns >= 1);
   assert(cell_width >= 1);
   assert(cell_height >= 1);
-  assert(start_pos_x >= 0);
-  assert(start_pos_y >= 0);
   assert(input_file != 0);
   assert(output_prefix != 0);
   assert(dim == 1 || dim == 2);
@@ -183,7 +247,10 @@ ReadOptions(int argc, char **argv) {
 
 static void
 Init(void) {
-  if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+  // Do I need to initialize any of the subsystems in here? I only am
+  // initializing SDL so that SDL2_image works (and I don't even know if I
+  // need to call SDL_Init myself for that).
+  if (SDL_Init(0) < 0) {
     Fail("%s.", SDL_GetError());
   }
   int img_init_flags = (IMG_INIT_JPG | IMG_INIT_PNG |
@@ -195,37 +262,41 @@ Init(void) {
 
 static void
 Cleanup(void) {
-  if (output_prefix != input_file) {
-    // The output prefix was allocated through a malloc call.
-    free(output_prefix);
-  }
+  assert(input_surf != 0);
+
+  free(output_prefix_allocated_storage);
+  SDL_FreeSurface(input_surf);
   IMG_Quit();
   SDL_Quit();
 }
 
-static char*
-GenOutputFileName(int row, int column) {
-  size_t const len = strlen(output_prefix) + 100;
-  char * const name = malloc(len);
-  if (name == 0) {
+static void
+SavePiece(SDL_Surface *piece, int row, int column) {
+  /*
+   * This function is a bit ugly. The overestimation by 100 is enough, but
+   * it's pretty ugly. I also wonder if this malloc call is really needed.
+   */
+  char *piece_name = malloc(strlen(output_prefix) + 100);
+  if (!piece_name) {
     Fail("Memory error: %s.", strerror(errno));
   }
-  if (dim == 1) {
-    sprintf(name, "%s_%d_%d.png", output_prefix, row, column);
+
+  if (dim == 2) {
+    sprintf(piece_name, "%s_%d_%d.png", output_prefix, row, column);
   }
   else {
-    assert(dim == 2);
-    sprintf(name, "%s_%d.png", output_prefix, row*column + column);
+    assert(dim == 1);
+    sprintf(piece_name, "%s_%d.png", output_prefix, row*columns + column);
   }
-  return name;
+  if (IMG_SavePNG(piece, piece_name) < 0) {
+    Fail("%s.", IMG_GetError());
+  }
+
+  free(piece_name);
 }
 
 static void
 OutputImagePieces(void) {
-  SDL_Surface * const input_surf = IMG_Load(input_file);
-  if (input_surf == 0) {
-    Fail("%s.", IMG_GetError());
-  }
   struct ImgSplit_Options const opts = {
     .start_x = start_pos_x,
     .start_y = start_pos_y,
@@ -246,16 +317,9 @@ OutputImagePieces(void) {
     if (piece == 0) {
       break;
     }
-
-    char * const output_file_name = GenOutputFileName(row, column);
-    if (IMG_SavePNG(piece, output_file_name) < 0) {
-      Fail("%s.", IMG_GetError());
-    }
-    free(output_file_name);
+    SavePiece(piece, row, column);
     SDL_FreeSurface(piece);
   }
-
-  SDL_FreeSurface(input_surf);
 }
 
 int

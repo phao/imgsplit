@@ -13,8 +13,9 @@ in a different image (output) file.
 
 The image files can be output in two ways:
 
-- PREFIX followed by the image row and then column number: tree_1_3.png
-- PREFIX followed by the image number (from 0 to ROWS*COLUMNS-1): tree_9.png
+- PREFIX followed by the image ROW and then COLUMN number: tree_1_3.png
+- PREFIX followed by the image SEQUENCE number (from 0 to ROWS*COLUMNS-1):
+tree_9.png
 
 The first way is the default way (it's what you get without any special
 command line argument). The second way is what you get by specifying the -1

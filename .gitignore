@@ -1,4 +1,5 @@
 imgsplit
+*.bmp
 *.d
 *.o
 *.png
