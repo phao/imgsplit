@@ -47,6 +47,15 @@ ParseNonNegativeInt(char *str, int *out, char expected_end) {
   return 0;
 }
 
+static char*
+ParsePositiveInt(char *str, int *out, char expected_end) {
+  char *ended_at = ParseNonNegativeInt(str, out, expected_end);
+  if (*out == 0) {
+    return 0;
+  }
+  return ended_at;
+}
+
 static void
 ReadOptions(int argc, char **argv) {
   int reading_opts = 1;
@@ -77,7 +86,7 @@ ReadOptions(int argc, char **argv) {
           if (i == argc) {
             Fail("Width unspecified (but -w was found).");
           }
-          if (ParseNonNegativeInt(argv[i], &cell_width, 0) == 0) {
+          if (ParsePositiveInt(argv[i], &cell_width, 0) == 0) {
             Fail("Invalid width value: %s.", argv[i]);
           }
           break;
@@ -87,7 +96,7 @@ ReadOptions(int argc, char **argv) {
           if (i == argc) {
             Fail("Height unspecified (but -h was found).");
           }
-          if (ParseNonNegativeInt(argv[i], &cell_height, 0) == 0) {
+          if (ParsePositiveInt(argv[i], &cell_height, 0) == 0) {
             Fail("Invalid height value: %s.", argv[i]);
           }
           break;
@@ -97,7 +106,7 @@ ReadOptions(int argc, char **argv) {
           if (i == argc) {
             Fail("Rows unspecified (but -r was found).");
           }
-          if (ParseNonNegativeInt(argv[i], &rows, 0) == 0) {
+          if (ParsePositiveInt(argv[i], &rows, 0) == 0) {
             Fail("Invalid rows value: %s.", argv[i]);
           }
           break;
@@ -107,7 +116,7 @@ ReadOptions(int argc, char **argv) {
           if (i == argc) {
             Fail("Columns unspecified (but -c was found).");
           }
-          if (ParseNonNegativeInt(argv[i], &columns, 0) == 0) {
+          if (ParsePositiveInt(argv[i], &columns, 0) == 0) {
             Fail("Invalid columns value: %s.", argv[i]);
           }
           break;
@@ -173,7 +182,7 @@ ReadOptions(int argc, char **argv) {
   }
 
   if (columns > 0 && rows > INT_MAX/columns) {
-    Fail("There are too many rows (%d) and columns (%d).", rows, columns);
+    Fail("There are too many rows (%d) and/or columns (%d).", rows, columns);
   }
 
   if (rows < 0 && cell_height > 0) {
@@ -190,16 +199,16 @@ ReadOptions(int argc, char **argv) {
   }
 
   if (rows <= 0) {
-    Fail("Invalid rows value: %d.", rows);
+    Fail("Rows value unspecified.");
   }
   else if (columns <= 0) {
-    Fail("Invalid columns value: %d.", columns);
+    Fail("Columns value unspecified");
   }
   else if (cell_width <= 0) {
-    Fail("Invalid width value: %d.", cell_width);
+    Fail("Width value unspecified");
   }
   else if (cell_height <= 0) {
-    Fail("Invalid height value: %d.", cell_height);
+    Fail("Height value unspecified");
   }
 
 
@@ -247,7 +256,7 @@ ReadOptions(int argc, char **argv) {
 
 static void
 Init(void) {
-  // Do I need to initialize any of the subsystems in here? I only am
+  // Do I need to initialize any of the SDL subsystems in here? I only am
   // initializing SDL so that SDL2_image works (and I don't even know if I
   // need to call SDL_Init myself for that).
   if (SDL_Init(0) < 0) {
@@ -272,11 +281,20 @@ Cleanup(void) {
 
 static void
 SavePiece(SDL_Surface *piece, int row, int column) {
-  /*
-   * This function is a bit ugly. The overestimation by 100 is enough, but
-   * it's pretty ugly. I also wonder if this malloc call is really needed.
-   */
-  char *piece_name = malloc(strlen(output_prefix) + 100);
+  // This function is a bit ugly. The suffix estimation works fine, but it's
+  // still ugly. It's impressive how something as insignificant as this
+  // bothers me so much.
+
+  enum {
+    // The amount of bits an int has is surely larger than how many
+    // decimal places it can take at most. So we double that bit count so
+    // we know how many more characters than strlen(output_prefix) we'll
+    // allocate. We add 10 more so we can surely also fit the ".png", the '_'
+    // characters in between the pieces, and the ending 0.
+    SUFFIX_ESTIMATION = sizeof (int) * 2 * CHAR_BIT + 10
+  };
+
+  char *piece_name = malloc(strlen(output_prefix) + SUFFIX_ESTIMATION);
   if (!piece_name) {
     Fail("Memory error: %s.", strerror(errno));
   }
@@ -297,6 +315,8 @@ SavePiece(SDL_Surface *piece, int row, int column) {
 
 static void
 OutputImagePieces(void) {
+  assert(input_surf != 0);
+
   struct ImgSplit_Options const opts = {
     .start_x = start_pos_x,
     .start_y = start_pos_y,

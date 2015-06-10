@@ -1,0 +1,128 @@
+OVERALL
+=======
+What is wanted is a way to take an image represented as a SDL_Surface and
+generate several other ones that result from the splitting of the original
+one.
+
+To split an image, you specify an initial (top,left) pixel coordinate, a
+pair (rows,columns) and a (width,height) pixel value pair. Given those values,
+the split is analogous to taking a rectangular regular grid and overlaying it
+on top of the image. This conceptual grid is specified by the 6 values
+earlier:
+
+  - It's placed at (top,left) in the original input image.
+  - It has the specified number of columns and rows.
+  - Each cell has the specified pixel (width,height) dimensions.
+
+After placing the grid on top of the image at the specified (top,left)
+position, each grid cell becomes an output image.
+
+That's the idea.
+
+The API specifies two functions: ImgSplit_Start and ImgSplit_Next.
+
+The ImgSplit_Start function lets the user specify the input image and the 6
+grid parameters (x [i.e. left], y [i.e. top], width [i.e. the cell width],
+height [i.e. the cell height], rows, columns) through the type struct
+ImgSplit_Options. As the result of calling ImgSplit_Start, the user gets a
+ImgSplit_Context set up so he/she can use by calling ImgSplit_Next.
+
+For each call to ImgSplit_Next on a given ImgSplit_Context*, the user will
+receive the next image to process, and its row and column in the grid.
+
+API ELEMENTS
+============
+enum ImgSplit_ErrorCode
+
+  The return type of ImgSplit_Next. When it wants to return a value indicating
+  an error, it'll return a value of this enum type that is not
+  IMG_SPLIT_NO_ERROR.
+
+  IMG_SPLIT_NO_ERROR is always 0, and all other values of this enum type are
+  negative integers.
+
+struct ImgSplit_Options
+
+  A concrete type that a user of this API is supposed to set up and pass to
+  ImgSplit_Start. An instance of this type stores the values telling how the
+  image splitter should operate.
+
+  .start_x, .start_y => The left(x)/top(y) pixel position on which the image
+                        splitter should start.
+
+  .rows, .columns => The amount of rows and columns the image splitter
+                     slicing grid should have.
+
+  .width, .height => The width and height of each grid cell.
+
+  The notion of a grid that is mentioned here is that explained in the
+  OVERALL section.
+
+ImgSplit_Context
+
+  An effectively opaque type. The user of this API is supposed to declare
+  a variable of this type and pass a pointer to it when calling ImgSplit_Start
+  and ImgSplit_Next. There is no other thing he/she should do with an instance
+  of this type.
+
+void
+ImgSplit_Start(ImgSplit_Context *context,
+               SDL_Surface *input,
+               struct ImgSplit_Options const *opts)
+
+  Initializes an ImgSplit_Context instance given a pointer to it, the input
+  image and the wanted options.
+
+  Although you pass a pointer to the options bundle, an implementation won't
+  hold on to it. After ImgSplit_Start returns, the options instance can go
+  away if you'd like.
+
+  Passing invalid options is an error and leads to undefined behavior. For
+  example, passing a (x,y) start position out of the bounds of the input
+  image is an error. In general, specifying a grid which isn't entirely
+  contained in the image is also an error.
+
+  Given you pass in valid parameters, this call cannot fail.
+
+enum ImgSplit_ErrorCode
+ImgSplit_Next(ImgSplit_Context *context,
+              SDL_Surface **out_surf,
+              size_t *out_row,
+              size_t *out_column)
+
+  Gives you the next image in the grid. The (row,column) value of the current
+  grid cell image being output is given to the caller via the two last
+  parameters (which are output parameters).
+
+  ImgSplit_Next will give you a newly allocated instance of SDL_Surface through
+  the second parameter (also an output parameter). The caller is supposed to
+  call SDL_FreeSurface on the given surface.
+
+  If ImgSplit_Next returns 0 and sets *out_surf to null, then there are no more
+  images for it to output. Next calls after one that signals you this repeat
+  this behavior.
+
+  An error is returned whenever ImgSplit_Next returns a negative value. In such
+  cases, the value of *out_surf is garbage. You should not look at it.
+
+  When this function succeeds, it returns 0. If all the images were already
+  processed, *out_surf is set to 0, and *out_row and *out_column remain
+  unchanged. When there are still images to be processed, *out_surf is set
+  to the address of the newly created SDL_Surface, *out_row is set to the
+  row of this grid cell and *out_column is set to the column of this grid
+  cell.
+
+const char*
+ImgSplit_GetError(void)
+
+  Whenever ImgSplit_Next signals an error by returning a negative value, you
+  can call this function to get which is the error message for the error.
+
+  If the error is IMG_SPLIT_SDL_ERROR, then this call is equivalent to a call
+  to SDL_GetError.
+
+NOTES
+=====
+If the documentation style comments in ImgSplit.h contradict what is in here,
+it's a bug in the documentation and it (this document or the source
+file, depending on which is wrong) should be fixed.

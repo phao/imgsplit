@@ -50,17 +50,14 @@ ImgSplit_Next(ImgSplit_Context *cx,
 
   *out_surf = SDL_CreateRGBSurface(0, cx->opts.width, cx->opts.height, 32,
                                    rmask, gmask, bmask, amask);
-
   if (!*out_surf) {
     return IMG_SPLIT_SDL_ERROR;
   }
-
   SDL_Rect const src_rect = {x, y, cx->opts.width, cx->opts.height};
   if (SDL_BlitSurface(cx->input, &src_rect, *out_surf, 0) < 0) {
     SDL_FreeSurface(*out_surf);
     return IMG_SPLIT_SDL_ERROR;
   }
-
   *out_row = cx->row;
   *out_column = cx->column;
 
