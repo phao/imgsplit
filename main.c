@@ -25,16 +25,19 @@ static char *input_file;
 
 static SDL_Surface *input_surf;
 
-static void
-Fail(char const *fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  fputs("Error: ", stderr);
-  vfprintf(stderr, fmt, args);
-  va_end(args);
-  fputc('\n', stderr);
-  exit(EXIT_FAILURE);
-}
+#define FailFmt(fmt, ...) do { \
+  fputs("Error: ", stderr); \
+  fprintf(stderr, fmt, __VA_ARGS__); \
+  fputc('\n', stderr); \
+  exit(EXIT_FAILURE); \
+} while (0)
+
+#define Fail(msg) do { \
+  fputs("Error: ", stderr); \
+  fputs(msg, stderr); \
+  fputc('\n', stderr); \
+  exit(EXIT_FAILURE); \
+} while (0)
 
 static char*
 ParseNonNegativeInt(char *str, int *out, char expected_end) {
@@ -72,11 +75,11 @@ ReadOptions(int argc, char **argv) {
           if (ended_at) {
             ended_at++;
             if (ParseNonNegativeInt(ended_at, &start_pos_y, 0) == 0) {
-              Fail("Invalid starting position: %s.\n", argv[i]);
+              FailFmt("Invalid starting position: %s.\n", argv[i]);
             }
           }
           else {
-            Fail("Invalid starting position: %s.", argv[i]);
+            FailFmt("Invalid starting position: %s.", argv[i]);
           }
           break;
         }
@@ -87,7 +90,7 @@ ReadOptions(int argc, char **argv) {
             Fail("Width unspecified (but -w was found).");
           }
           if (ParsePositiveInt(argv[i], &cell_width, 0) == 0) {
-            Fail("Invalid width value: %s.", argv[i]);
+            FailFmt("Invalid width value: %s.", argv[i]);
           }
           break;
 
@@ -97,7 +100,7 @@ ReadOptions(int argc, char **argv) {
             Fail("Height unspecified (but -h was found).");
           }
           if (ParsePositiveInt(argv[i], &cell_height, 0) == 0) {
-            Fail("Invalid height value: %s.", argv[i]);
+            FailFmt("Invalid height value: %s.", argv[i]);
           }
           break;
 
@@ -107,7 +110,7 @@ ReadOptions(int argc, char **argv) {
             Fail("Rows unspecified (but -r was found).");
           }
           if (ParsePositiveInt(argv[i], &rows, 0) == 0) {
-            Fail("Invalid rows value: %s.", argv[i]);
+            FailFmt("Invalid rows value: %s.", argv[i]);
           }
           break;
 
@@ -117,7 +120,7 @@ ReadOptions(int argc, char **argv) {
             Fail("Columns unspecified (but -c was found).");
           }
           if (ParsePositiveInt(argv[i], &columns, 0) == 0) {
-            Fail("Invalid columns value: %s.", argv[i]);
+            FailFmt("Invalid columns value: %s.", argv[i]);
           }
           break;
 
@@ -145,7 +148,7 @@ ReadOptions(int argc, char **argv) {
           break;
 
         default:
-          Fail("Unknown command line option %s.", argv[i]);
+          FailFmt("Unknown command line option %s.", argv[i]);
       }
     }
     else {
@@ -162,27 +165,27 @@ ReadOptions(int argc, char **argv) {
   else {
     input_surf = IMG_Load(input_file);
     if (input_surf == 0) {
-      Fail("%s.", IMG_GetError());
+      FailFmt("%s.", IMG_GetError());
     }
   }
 
   if (start_pos_x < 0) {
-    Fail("Invalid start position (negative x): %d.", start_pos_x);
+    FailFmt("Invalid start position (negative x): %d.", start_pos_x);
   }
   else if (start_pos_y < 0) {
-    Fail("Invalid start position (negative y): %d.", start_pos_y);
+    FailFmt("Invalid start position (negative y): %d.", start_pos_y);
   }
   else if (start_pos_x >= input_surf->w) {
-    Fail("Start X position lies outside image width bounds: %d of %d.\n",
+    FailFmt("Start X position lies outside image width bounds: %d of %d.\n",
          start_pos_x, input_surf->w);
   }
   else if (start_pos_y >= input_surf->h) {
-    Fail("Start Y position lies outside image height bounds: %d of %d.\n",
+    FailFmt("Start Y position lies outside image height bounds: %d of %d.\n",
          start_pos_y, input_surf->h);
   }
 
   if (columns > 0 && rows > INT_MAX/columns) {
-    Fail("There are too many rows (%d) and/or columns (%d).", rows, columns);
+    FailFmt("There are too many rows (%d) and/or columns (%d).", rows, columns);
   }
 
   if (rows < 0 && cell_height > 0) {
@@ -237,7 +240,7 @@ ReadOptions(int argc, char **argv) {
       // there are before the '.'.
       output_prefix = malloc(ext_point+1);
       if (!output_prefix) {
-        Fail("Memory error: %s.", strerror(errno));
+        FailFmt("Memory error: %s.", strerror(errno));
       }
       output_prefix_allocated_storage = output_prefix;
       strncpy(output_prefix, input_file, ext_point);
@@ -260,12 +263,12 @@ Init(void) {
   // initializing SDL so that SDL2_image works (and I don't even know if I
   // need to call SDL_Init myself for that).
   if (SDL_Init(0) < 0) {
-    Fail("%s.", SDL_GetError());
+    FailFmt("%s.", SDL_GetError());
   }
   int img_init_flags = (IMG_INIT_JPG | IMG_INIT_PNG |
                         IMG_INIT_TIF | IMG_INIT_WEBP);
   if ((IMG_Init(img_init_flags) & img_init_flags) != img_init_flags) {
-    Fail("%s.", IMG_GetError());
+    FailFmt("%s.", IMG_GetError());
   }
 }
 
@@ -296,7 +299,7 @@ SavePiece(SDL_Surface *piece, int row, int column) {
 
   char *piece_name = malloc(strlen(output_prefix) + SUFFIX_ESTIMATION);
   if (!piece_name) {
-    Fail("Memory error: %s.", strerror(errno));
+    FailFmt("Memory error: %s.", strerror(errno));
   }
 
   if (dim == 2) {
@@ -307,7 +310,7 @@ SavePiece(SDL_Surface *piece, int row, int column) {
     sprintf(piece_name, "%s_%d.png", output_prefix, row*columns + column);
   }
   if (IMG_SavePNG(piece, piece_name) < 0) {
-    Fail("%s.", IMG_GetError());
+    FailFmt("%s.", IMG_GetError());
   }
 
   free(piece_name);
@@ -332,7 +335,7 @@ OutputImagePieces(void) {
     size_t row, column;
     SDL_Surface *piece;
     if (ImgSplit_Next(&img_split_context, &piece, &row, &column) < 0) {
-      Fail("%s.", ImgSplit_GetError());
+      FailFmt("%s.", ImgSplit_GetError());
     }
     if (piece == 0) {
       break;
