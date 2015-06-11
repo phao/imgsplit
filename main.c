@@ -17,7 +17,14 @@ static int rows = -1,
            cell_height = -1,
            start_pos_x,
            start_pos_y,
-           dim = 2;
+           dim = 2,
+           num_width; // When generating the file name of the image, what is
+                      // the characters width for the suffix numbers?
+                      // If 4, you'd have prefix_0003.png or prefix_0130.png,
+                      // while for 2 you'd have prefix_12.png or prefix_99.png;
+                      // it's also used for dim=2 file names, like
+                      // prefix_023_011.png for when it's 3.
+                      // See ComputeNumericSuffixesWidth.
 
 static char *output_prefix;
 static char *output_prefix_allocated_storage;
@@ -39,6 +46,11 @@ static SDL_Surface *input_surf;
   exit(EXIT_FAILURE); \
 } while (0)
 
+static int
+Max(int a, int b) {
+  return a > b ? a : b;
+}
+
 static char*
 ParseNonNegativeInt(char *str, int *out, char expected_end) {
   char *ended_at;
@@ -57,6 +69,19 @@ ParsePositiveInt(char *str, int *out, char expected_end) {
     return 0;
   }
   return ended_at;
+}
+
+static void
+ComputeNumericSuffixesWidth(void) {
+  // Computes the amount of decimal places for the numeric file name suffixes.
+  // Result goes into num_width.
+  assert(rows > 0);
+  assert(columns > 0);
+  int n = (dim == 1) ? (rows*columns) : Max(rows, columns);
+  while (n > 0) {
+    num_width++;
+    n /= 10;
+  }
 }
 
 static void
@@ -177,15 +202,16 @@ ReadOptions(int argc, char **argv) {
   }
   else if (start_pos_x >= input_surf->w) {
     FailFmt("Start X position lies outside image width bounds: %d of %d.\n",
-         start_pos_x, input_surf->w);
+            start_pos_x, input_surf->w);
   }
   else if (start_pos_y >= input_surf->h) {
     FailFmt("Start Y position lies outside image height bounds: %d of %d.\n",
-         start_pos_y, input_surf->h);
+            start_pos_y, input_surf->h);
   }
 
   if (columns > 0 && rows > INT_MAX/columns) {
-    FailFmt("There are too many rows (%d) and/or columns (%d).", rows, columns);
+    FailFmt("There are too many rows (%d) and/or columns (%d).",
+            rows, columns);
   }
 
   if (rows < 0 && cell_height > 0) {
@@ -284,6 +310,8 @@ Cleanup(void) {
 
 static void
 SavePiece(SDL_Surface *piece, int row, int column) {
+  assert(num_width > 0);
+
   // This function is a bit ugly. The suffix estimation works fine, but it's
   // still ugly. It's impressive how something as insignificant as this
   // bothers me so much.
@@ -303,11 +331,13 @@ SavePiece(SDL_Surface *piece, int row, int column) {
   }
 
   if (dim == 2) {
-    sprintf(piece_name, "%s_%d_%d.png", output_prefix, row, column);
+    sprintf(piece_name, "%s_%0*d_%0*d.png", output_prefix, num_width,
+            row, num_width, column);
   }
   else {
     assert(dim == 1);
-    sprintf(piece_name, "%s_%d.png", output_prefix, row*columns + column);
+    sprintf(piece_name, "%s_%0*d.png", output_prefix, num_width,
+            row*columns + column);
   }
   if (IMG_SavePNG(piece, piece_name) < 0) {
     FailFmt("%s.", IMG_GetError());
@@ -349,6 +379,7 @@ int
 main(int argc, char **argv) {
   Init();
   ReadOptions(argc, argv);
+  ComputeNumericSuffixesWidth();
   OutputImagePieces();
   Cleanup();
   return 0;
